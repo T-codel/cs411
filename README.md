@@ -25,3 +25,16 @@ Possible features include:
 - Frontend: Next.js with TypeScript
 - Backend: Django
 - Package management: npm for the client, Pipenv for the server
+
+## Branch Naming Conventions
+
+Use short, descriptive branch names that include the type of work, a brief name, and your initials.
+
+Examples:
+
+- `feature/feature-name-initials` for new features
+- `bugfix/fix-name-initials` for bug fixes
+- `docs/update-readme-initials` for documentation changes
+- `refactor/refactor-name-initials` for code cleanup or restructuring
+
+For example, if Jane Doe is adding login support, the branch could be named `feature/login-jd`.
