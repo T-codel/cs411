@@ -16,32 +16,9 @@ Possible features include:
 
 ## Project Structure
 
-```text
-project/
-+-- client/
-|   +-- app/
-|   |   +-- globals.css
-|   |   +-- layout.tsx
-|   |   +-- page.tsx
-|   +-- public/
-|   +-- package.json
-|   +-- package-lock.json
-|   +-- next.config.ts
-|   +-- tsconfig.json
-|   +-- README.md
-+-- server/
-|   +-- cs411/
-|   |   +-- cs411/
-|   |   |   +-- __init__.py
-|   |   |   +-- asgi.py
-|   |   |   +-- settings.py
-|   |   |   +-- urls.py
-|   |   |   +-- wsgi.py
-|   |   +-- manage.py
-|   +-- Pipfile
-|   +-- Pipfile.lock
-+-- README.md
-```
+- `client/` contains the frontend code. This is a Next.js app, so pages, layouts, styles, and UI work should start here.
+- `server/` contains the backend code. This is a Django project, so API routes, backend settings, models, and server-side logic should start here.
+- `README.md` contains project overview information for anyone new to the codebase.
 
 ## Tech Stack
 
