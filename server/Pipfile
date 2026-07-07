@@ -4,9 +4,13 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-django = "*"
+fastapi = "*"
+uvicorn = {extras = ["standard"], version = "*"}
+pydantic = "*"
 
 [dev-packages]
+pytest = "*"
+httpx2 = "*"
 
 [requires]
 python_version = "3.13"

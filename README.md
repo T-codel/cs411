@@ -2,29 +2,43 @@
 
 ## Tentative Project Idea
 
-A simple LeetCode-style app for learning API design and full-stack development.
+A simple repository visualizer for learning how full-stack apps fit together.
 
-The app will provide small backend and frontend challenges focused on practical full-stack concepts. Instead of only solving algorithm problems, users can practice designing API endpoints, connecting frontend pages to backend services, handling request and response formats, and understanding how a complete web application fits together.
-
-Possible features include:
-
-- A catalog of API and full-stack practice problems
-- Problem statements with expected request and response behavior
-- A frontend interface for browsing and attempting problems
-- A backend service for storing problems, submissions, and progress
-- Example solutions or walkthroughs for learning common design patterns
+Enter a public GitHub repository URL and the app renders a left-to-right React Flow tree of the repo folders. Random files at the same level are ignored so the map stays high level and readable.
 
 ## Project Structure
 
-- `client/` contains the frontend code. This is a Next.js app, so pages, layouts, styles, and UI work should start here.
-- `server/` contains the backend code. This is a Django project, so API routes, backend settings, models, and server-side logic should start here.
+- `client/` contains a Vite React frontend written in TypeScript.
+- `client/src/` contains the React app, API client, React Flow canvas, and styles.
+- `server/` contains a FastAPI backend.
+- `server/app/` contains API routes, Pydantic schemas, and in-memory sample data.
 - `README.md` contains project overview information for anyone new to the codebase.
 
 ## Tech Stack
 
-- Frontend: Next.js with TypeScript
-- Backend: Django
+- Frontend: React, TypeScript, Vite, React Flow, Tailwind CSS, shadcn/ui-style components
+- Backend: FastAPI, Pydantic, Uvicorn
 - Package management: npm for the client, Pipenv for the server
+
+## Running Locally
+
+Start the backend:
+
+```bash
+cd server
+pipenv install
+pipenv run uvicorn app.main:app --reload --port 8000
+```
+
+Start the frontend:
+
+```bash
+cd client
+npm install
+npm run dev
+```
+
+The frontend expects the API at `http://localhost:8000` by default. To point it elsewhere, set `VITE_API_URL` before running Vite.
 
 ## Branch Naming Conventions
 
