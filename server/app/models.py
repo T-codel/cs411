@@ -18,3 +18,11 @@ class RepoTreeResponse(BaseModel):
     repo: str
     source_url: str
     folders: list[RepoFolder]
+
+class ExplainRequest(BaseModel):
+    repo: str
+    folders: list[RepoFolder]
+
+
+class ExplainResponse(BaseModel):
+    explanation: str

@@ -12,3 +12,7 @@ export type RepoTreeResponse = {
   source_url: string;
   folders: RepoFolder[];
 };
+
+export type ExplainResponse = {
+  explanation: string;
+};

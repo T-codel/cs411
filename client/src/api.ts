@@ -1,4 +1,4 @@
-import type { RepoTreeResponse } from "@/types";
+import type { ExplainResponse, RepoFolder, RepoTreeResponse } from "@/types";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
@@ -23,5 +23,16 @@ export async function analyzeRepository(repoUrl: string): Promise<RepoTreeRespon
     throw new Error(payload?.detail ?? `Request failed with ${response.status}`);
   }
 
+  return payload;
+}
+
+export async function explainRepository(repo: string, folders: RepoFolder[]): Promise<ExplainResponse> {
+  const response = await fetch(`${API_URL}/api/explain`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repo, folders }),
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(payload?.detail ?? `Request failed with ${response.status}`);
   return payload;
 }

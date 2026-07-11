@@ -10,7 +10,7 @@ import ReactFlow, {
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { AlertCircle, FolderTree, GitBranch, Loader2, Sparkles } from "lucide-react";
-import { analyzeRepository } from "@/api";
+import { analyzeRepository, explainRepository } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -99,7 +99,8 @@ function App() {
   const [tree, setTree] = useState<RepoTreeResponse>(sampleTree);
   const [status, setStatus] = useState<keyof typeof statusCopy>("idle");
   const [error, setError] = useState("");
-
+  const [explanation, setExplanation] = useState("");
+  const [explaining, setExplaining] = useState(false);
   const nodes = useMemo(() => buildNodes(tree.folders), [tree.folders]);
   const edges = useMemo(() => buildEdges(tree.folders), [tree.folders]);
 
@@ -117,7 +118,17 @@ function App() {
       setError(caught instanceof Error ? caught.message : "Something went wrong.");
     }
   }
-
+  async function handleExplain() {
+    setExplaining(true);
+    try {
+      const result = await explainRepository(tree.repo, tree.folders);
+      setExplanation(result.explanation);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not generate explanation.");
+    } finally {
+      setExplaining(false);
+    }
+  }
   return (
     <main className="min-h-svh bg-[radial-gradient(circle_at_top_left,hsl(var(--primary)/0.16),transparent_32rem),linear-gradient(180deg,hsl(var(--background)),hsl(var(--muted)))] text-foreground">
       <div className="grid min-h-svh grid-cols-1 lg:grid-cols-[420px_minmax(0,1fr)]">
@@ -196,3 +207,4 @@ function App() {
 }
 
 export default App;
+

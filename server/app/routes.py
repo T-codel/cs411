@@ -1,12 +1,15 @@
 from dataclasses import dataclass
 import json
+import os
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
 
 from fastapi import APIRouter, HTTPException
 
-from .models import RepoFolder, RepoTreeRequest, RepoTreeResponse
+
+
+from .models import ExplainRequest, ExplainResponse, RepoFolder, RepoTreeRequest, RepoTreeResponse
 
 router = APIRouter()
 MAX_FOLDERS = 90
@@ -143,3 +146,41 @@ def create_repo_tree(payload: RepoTreeRequest) -> RepoTreeResponse:
         raise HTTPException(status_code=502, detail="GitHub did not return a repository tree")
 
     return build_folder_response(repo, branch, tree)
+
+
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+
+def call_gemini(prompt: str) -> str:
+    if not GEMINI_API_KEY:
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY is not configured")
+
+    body = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode()
+    request = Request(
+        GEMINI_URL,
+        data=body,
+        headers={"Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY},
+    )
+    try:
+        with urlopen(request, timeout=20) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except HTTPError as error:
+        raise HTTPException(status_code=502, detail="Gemini request failed") from error
+    except URLError as error:
+        raise HTTPException(status_code=502, detail="Could not reach Gemini") from error
+
+    try:
+        return payload["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError) as error:
+        raise HTTPException(status_code=502, detail="Gemini returned an unexpected response") from error
+    
+@router.post("/explain", response_model=ExplainResponse)
+def explain_repo(payload: ExplainRequest) -> ExplainResponse:
+    folder_list = "\n".join(f"- {f.path or '(root)'}" for f in payload.folders)
+    prompt = (
+        f"Given this folder structure for the GitHub repo '{payload.repo}', "
+        f"write a 3-4 sentence plain-English summary of what this project likely does "
+        f"and how it's organized:\n\n{folder_list}"
+    )
+    return ExplainResponse(explanation=call_gemini(prompt))
