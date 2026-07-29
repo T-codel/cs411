@@ -55,10 +55,13 @@ For example, if Jane Doe is adding login support, the branch could be named `fea
 
 ## LLM functionality
 after launching the server, you can restart the server with the associated API Key for testing using the following commands.
-export GEMINI_API_KEY="" 
-uvicorn app.main:app --reload
+`export GEMINI_API_KEY="" `
+`uvicorn app.main:app --reload`
 
 An API key can be retrieved from https://aistudio.google.com
+
+TODO: 
+As a feature, I added a menu with a button that appears when you click on a node. This button will be used to have an LLM analyze a specific file. Work in progress.
 
 
 
