@@ -112,3 +112,73 @@ body {
   background: hsl(var(--background) / 0.76);
   color: hsl(var(--muted-foreground));
 }
+
+/* Node context menu */
+.node-menu {
+  position: absolute;
+  z-index: 10;
+  min-width: 160px;
+  border-radius: 8px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  box-shadow: 0 8px 24px hsl(222 47% 11% / 0.18);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transform: translate(-50%, 8px); /* centre horizontally under cursor */
+}
+
+.node-menu__path {
+  font-size: 0.72rem;
+  color: hsl(var(--muted-foreground));
+  padding: 2px 8px 4px;
+  border-bottom: 1px solid hsl(var(--border));
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.node-menu__btn {
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: 5px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  color: hsl(var(--foreground));
+  background: transparent;
+  border: none;
+  transition: background 120ms ease;
+}
+
+.node-menu__btn:hover {
+  background: hsl(var(--muted));
+}
+.guide-order-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* FR-05 – Numbered circle in the sidebar step list */
+.guide-step-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+}

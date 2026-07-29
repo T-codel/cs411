@@ -26,3 +26,19 @@ class ExplainRequest(BaseModel):
 
 class ExplainResponse(BaseModel):
     explanation: str
+
+
+class GuideStep(BaseModel):
+    folder_id: str
+    folder_path: str
+    order: int
+    reason: str
+
+
+class GuideRequest(BaseModel):
+    repo: str
+    folders: list[RepoFolder]
+
+
+class GuideResponse(BaseModel):
+    steps: list[GuideStep]

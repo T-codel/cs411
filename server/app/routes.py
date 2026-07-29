@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException
 
 
 
-from .models import ExplainRequest, ExplainResponse, RepoFolder, RepoTreeRequest, RepoTreeResponse
+from .models import ExplainRequest, ExplainResponse, GuideRequest, GuideResponse, GuideStep, RepoFolder, RepoTreeRequest, RepoTreeResponse
 
 router = APIRouter()
 MAX_FOLDERS = 90
@@ -149,7 +149,7 @@ def create_repo_tree(payload: RepoTreeRequest) -> RepoTreeResponse:
 
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.5-flash"
 GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 
 def call_gemini(prompt: str) -> str:
@@ -166,14 +166,22 @@ def call_gemini(prompt: str) -> str:
         with urlopen(request, timeout=20) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except HTTPError as error:
-        raise HTTPException(status_code=502, detail="Gemini request failed") from error
+        try:
+            error_body = json.loads(error.read().decode("utf-8"))
+            error_message = error_body.get("error", {}).get("message", str(error))
+        except Exception:
+            error_message = str(error)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Gemini error {error.code}: {error_message}",
+        ) from error
     except URLError as error:
-        raise HTTPException(status_code=502, detail="Could not reach Gemini") from error
+        raise HTTPException(status_code=502, detail=f"Could not reach Gemini: {error.reason}") from error
 
     try:
         return payload["candidates"][0]["content"]["parts"][0]["text"]
     except (KeyError, IndexError) as error:
-        raise HTTPException(status_code=502, detail="Gemini returned an unexpected response") from error
+        raise HTTPException(status_code=502, detail=f"Gemini returned an unexpected response: {payload}") from error
     
 @router.post("/explain", response_model=ExplainResponse)
 def explain_repo(payload: ExplainRequest) -> ExplainResponse:
@@ -184,3 +192,71 @@ def explain_repo(payload: ExplainRequest) -> ExplainResponse:
         f"and how it's organized:\n\n{folder_list}"
     )
     return ExplainResponse(explanation=call_gemini(prompt))
+
+
+@router.post("/guide", response_model=GuideResponse)
+def guide_repo(payload: GuideRequest) -> GuideResponse:
+    folder_index = {f.id: f for f in payload.folders}
+    folder_lines = "\n".join(
+        f'  {{"id": "{f.id}", "path": "{f.path or "(root)"}", "depth": {f.depth}, "child_count": {f.child_count}}}'
+        for f in payload.folders
+    )
+    prompt = (
+        f"You are a senior engineer onboarding a new developer to the GitHub repository '{payload.repo}'.\n"
+        f"Below is the repository's folder list as JSON objects with id, path, depth, and child_count.\n\n"
+        f"[\n{folder_lines}\n]\n\n"
+        f"Choose the best 3 to 5 folders a newcomer should explore FIRST to build mental model of this codebase. "
+        f"Order them from most important to least important.\n"
+        f"Return ONLY a JSON array (no markdown, no explanation outside JSON) like this:\n"
+        f'[\n'
+        f'  {{"folder_id": "<id>", "folder_path": "<path>", "order": 1, "reason": "<one sentence why>"}},\n'
+        f'  {{"folder_id": "<id>", "folder_path": "<path>", "order": 2, "reason": "<one sentence why>"}},\n'
+        f'  {{"folder_id": "<id>", "folder_path": "<path>", "order": 3, "reason": "<one sentence why>"}}\n'
+        f']\n'
+        f"Rules:\n"
+        f"- folder_id must exactly match one of the id values in the input list.\n"
+        f"- folder_path must exactly match the corresponding path value (use '(root)' for the root).\n"
+        f"- Include at least 3 entries and no more than 5.\n"
+        f"- Reason must be a single clear sentence explaining WHY a newcomer should look here first.\n"
+        f"- Return pure JSON only."
+    )
+    raw = call_gemini(prompt)
+
+    # Strip optional markdown fences that the model sometimes emits
+    clean = raw.strip()
+    if clean.startswith("```"):
+        clean = clean.split("\n", 1)[-1]
+        if clean.endswith("```"):
+            clean = clean.rsplit("```", 1)[0]
+        clean = clean.strip()
+
+    try:
+        items: list[dict] = json.loads(clean)
+    except json.JSONDecodeError as error:
+        raise HTTPException(status_code=502, detail="Guide LLM returned invalid JSON") from error
+
+    steps: list[GuideStep] = []
+    for item in items:
+        folder_id_val = str(item.get("folder_id", ""))
+        # Validate that the folder_id actually exists in the provided folder list
+        matched_folder = folder_index.get(folder_id_val)
+        if matched_folder is None:
+            continue
+        steps.append(
+            GuideStep(
+                folder_id=folder_id_val,
+                folder_path=matched_folder.path or "(root)",
+                order=int(item.get("order", len(steps) + 1)),
+                reason=str(item.get("reason", "")),
+            )
+        )
+
+    steps.sort(key=lambda s: s.order)
+
+    if len(steps) < 3:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Guide LLM returned fewer than 3 valid steps (got {len(steps)})",
+        )
+
+    return GuideResponse(steps=steps)

@@ -16,3 +16,14 @@ export type RepoTreeResponse = {
 export type ExplainResponse = {
   explanation: string;
 };
+
+export type GuideStep = {
+  folder_id: string;
+  folder_path: string;
+  order: number;
+  reason: string;
+};
+
+export type GuideResponse = {
+  steps: GuideStep[];
+};
