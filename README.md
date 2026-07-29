@@ -52,3 +52,14 @@ Examples:
 - `refactor/refactor-name-initials` for code cleanup or restructuring
 
 For example, if Jane Doe is adding login support, the branch could be named `feature/login-jd`.
+
+## LLM functionality
+after launching the server, you can restart the server with the associated API Key for testing using the following commands.
+export GEMINI_API_KEY="" 
+uvicorn app.main:app --reload
+
+An API key can be retrieved from https://aistudio.google.com
+
+
+
+
