@@ -26,20 +26,46 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import type { GuideStep, RepoFolder, RepoTreeResponse } from "@/types";
+import type { GuideStep, NodeCategory, RepoEdge, RepoFolder, RepoTreeResponse } from "@/types";
+
+const CATEGORY_COLORS: Record<NodeCategory, string> = {
+  "Overview": "hsl(215 20% 45%)",
+  "Entry Point": "hsl(0 72% 51%)",
+  "UI / Presentation": "hsl(271 70% 52%)",
+  "API / Interface": "hsl(217 91% 55%)",
+  "Domain / Core Logic": "hsl(25 90% 50%)",
+  "Data / Persistence": "hsl(142 70% 38%)",
+  "Infrastructure / Configuration": "hsl(189 85% 38%)",
+  "Shared / Utilities": "hsl(45 90% 42%)",
+  "Testing / Quality": "hsl(330 75% 52%)",
+  "Documentation / Examples": "hsl(168 72% 35%)",
+};
+const NODE_CATEGORIES = Object.keys(CATEGORY_COLORS) as NodeCategory[];
 
 const sampleTree: RepoTreeResponse = {
   repo: "example/learning-platform",
   source_url: "https://github.com/example/learning-platform",
+  explanation: "A sample repository map. Generate a tree to receive an AI-pruned architecture overview.",
+  original_folder_count: 8,
+  pruning_criteria: [],
+  edges: [
+    { parent_id: "root", child_id: "src", label: "contains" },
+    { parent_id: "root", child_id: "server", label: "contains" },
+    { parent_id: "root", child_id: "docs", label: "documents" },
+    { parent_id: "src", child_id: "components", label: "renders" },
+    { parent_id: "src", child_id: "routes", label: "routes to" },
+    { parent_id: "server", child_id: "api", label: "exposes" },
+    { parent_id: "server", child_id: "models", label: "persists through" },
+  ],
   folders: [
-    { id: "root", name: "learning-platform", path: "", depth: 0, child_count: 4 },
-    { id: "src", name: "src", path: "src", depth: 1, parent: "root", child_count: 3 },
-    { id: "server", name: "server", path: "server", depth: 1, parent: "root", child_count: 2 },
-    { id: "docs", name: "docs", path: "docs", depth: 1, parent: "root", child_count: 1 },
-    { id: "components", name: "components", path: "src/components", depth: 2, parent: "src", child_count: 2 },
-    { id: "routes", name: "routes", path: "src/routes", depth: 2, parent: "src", child_count: 0 },
-    { id: "api", name: "api", path: "server/api", depth: 2, parent: "server", child_count: 0 },
-    { id: "models", name: "models", path: "server/models", depth: 2, parent: "server", child_count: 0 },
+    { id: "root", name: "learning-platform", path: "", depth: 0, child_count: 4, description: "Repository root.", category: "Overview", category_reason: "Top-level context." },
+    { id: "src", name: "src", path: "src", depth: 1, parent: "root", child_count: 3, description: "Frontend source code.", category: "UI / Presentation", category_reason: "Contains the frontend." },
+    { id: "server", name: "server", path: "server", depth: 1, parent: "root", child_count: 2, description: "Backend application.", category: "Domain / Core Logic", category_reason: "Contains backend behavior." },
+    { id: "docs", name: "docs", path: "docs", depth: 1, parent: "root", child_count: 1, description: "Project documentation.", category: "Documentation / Examples", category_reason: "Contains documentation." },
+    { id: "components", name: "components", path: "src/components", depth: 2, parent: "src", child_count: 2, description: "Reusable UI components.", category: "UI / Presentation", category_reason: "Reusable views." },
+    { id: "routes", name: "routes", path: "src/routes", depth: 2, parent: "src", child_count: 0, description: "Application routes.", category: "Entry Point", category_reason: "Navigation entry points." },
+    { id: "api", name: "api", path: "server/api", depth: 2, parent: "server", child_count: 0, description: "HTTP API layer.", category: "API / Interface", category_reason: "External HTTP boundary." },
+    { id: "models", name: "models", path: "server/models", depth: 2, parent: "server", child_count: 0, description: "Domain and persistence models.", category: "Data / Persistence", category_reason: "Defines persisted data." },
   ],
 };
 
@@ -68,7 +94,8 @@ function folderToNode(
   guideMap: Map<string, GuideStep>,
 ): Node {
   const step = guideMap.get(folder.id);
-  const [borderColor, bgColor] = step ? guideStepColors(step.order) : ["", ""];
+  const [borderColor] = step ? guideStepColors(step.order) : [""];
+  const categoryColor = CATEGORY_COLORS[folder.category];
 
   return {
     id: folder.id,
@@ -78,19 +105,19 @@ function folderToNode(
     },
     sourcePosition: Position.Right,
     targetPosition: Position.Left,
-    style: step
-      ? {
-          border: `2px solid ${borderColor}`,
-          background: bgColor,
-          boxShadow: `0 0 0 3px ${borderColor}33, 0 18px 50px hsl(222 47% 11% / 0.18)`,
-        }
-      : undefined,
+    style: {
+      border: `2px solid ${categoryColor}`,
+      background: `color-mix(in srgb, ${categoryColor} 10%, hsl(var(--card)))`,
+      boxShadow: step
+        ? `0 0 0 4px ${borderColor}, 0 18px 50px hsl(222 47% 11% / 0.18)`
+        : `0 10px 30px hsl(222 47% 11% / 0.12)`,
+    },
     data: {
       label: (
         <div className="repo-node">
           <div
             className="repo-node__icon"
-            style={step ? { background: bgColor, color: borderColor } : undefined}
+            style={{ background: `color-mix(in srgb, ${categoryColor} 16%, transparent)`, color: categoryColor }}
           >
             {step ? (
               <span className="guide-order-badge" style={{ color: borderColor }}>
@@ -104,7 +131,7 @@ function folderToNode(
             <strong>{folder.name}</strong>
             <span>{folder.path || "repo root"}</span>
           </div>
-          <Badge variant="secondary">{folder.child_count}</Badge>
+          <Badge style={{ color: categoryColor }} variant="secondary">{folder.category}</Badge>
         </div>
       ),
     },
@@ -120,14 +147,20 @@ function buildNodes(folders: RepoFolder[], guideMap: Map<string, GuideStep>): No
   });
 }
 
-function buildEdges(folders: RepoFolder[]): Edge[] {
-  return folders
-    .filter((folder) => folder.parent)
-    .map((folder) => ({
-      id: `${folder.parent}-${folder.id}`,
-      source: folder.parent!,
-      target: folder.id,
+function buildEdges(folders: RepoFolder[], repoEdges: RepoEdge[]): Edge[] {
+  const visibleIds = new Set(folders.map((folder) => folder.id));
+  return repoEdges
+    .filter((edge) => visibleIds.has(edge.parent_id) && visibleIds.has(edge.child_id))
+    .map((edge) => ({
+      id: `${edge.parent_id}-${edge.child_id}`,
+      source: edge.parent_id,
+      target: edge.child_id,
       type: "smoothstep",
+      label: edge.label,
+      labelStyle: { fill: "hsl(var(--foreground))", fontSize: 11, fontWeight: 600 },
+      labelBgStyle: { fill: "hsl(var(--background))", fillOpacity: 0.9 },
+      labelBgPadding: [5, 3] as [number, number],
+      labelBgBorderRadius: 4,
       markerEnd: {
         type: MarkerType.ArrowClosed,
         color: "hsl(var(--primary))",
@@ -142,6 +175,9 @@ function buildEdges(folders: RepoFolder[]): Edge[] {
 type NodeMenu = {
   folderId: string;
   folderPath: string;
+  description: string;
+  category: NodeCategory;
+  categoryReason: string;
   x: number; // px from left of the <section>
   y: number; // px from top of the <section>
 };
@@ -160,6 +196,7 @@ function AppInner() {
   const [guideSteps, setGuideSteps] = useState<GuideStep[]>([]);
   const [guiding, setGuiding] = useState(false);
   const [guideError, setGuideError] = useState("");
+  const [activeCategories, setActiveCategories] = useState<Set<NodeCategory>>(() => new Set(NODE_CATEGORIES));
 
   // Node context menu
   const [nodeMenu, setNodeMenu] = useState<NodeMenu | null>(null);
@@ -179,6 +216,9 @@ function AppInner() {
     setNodeMenu({
       folderId: node.id,
       folderPath: folder?.path || "(root)",
+      description: folder?.description || "No description is available.",
+      category: folder?.category || "Overview",
+      categoryReason: folder?.category_reason || "",
       x: event.clientX - rect.left,
       y: event.clientY - rect.top,
     });
@@ -196,8 +236,12 @@ function AppInner() {
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, [nodeMenu]);
 
-  const nodes = useMemo(() => buildNodes(tree.folders, guideMap), [tree.folders, guideMap]);
-  const edges = useMemo(() => buildEdges(tree.folders), [tree.folders]);
+  const visibleFolders = useMemo(
+    () => tree.folders.filter((folder) => folder.id === "root" || activeCategories.has(folder.category)),
+    [tree.folders, activeCategories],
+  );
+  const nodes = useMemo(() => buildNodes(visibleFolders, guideMap), [visibleFolders, guideMap]);
+  const edges = useMemo(() => buildEdges(visibleFolders, tree.edges), [visibleFolders, tree.edges]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -209,6 +253,8 @@ function AppInner() {
     try {
       const result = await analyzeRepository(repoUrl);
       setTree(result);
+      setExplanation(result.explanation);
+      setActiveCategories(new Set(NODE_CATEGORIES));
       setStatus("ready");
       setTimeout(() => fitView({ padding: 0.22, duration: 400 }), 50);
     } catch (caught) {
@@ -242,6 +288,15 @@ function AppInner() {
       setGuiding(false);
     }
   }, [tree]);
+
+  function toggleCategory(category: NodeCategory) {
+    setActiveCategories((current) => {
+      const next = new Set(current);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+  }
 
   return (
     <main className="min-h-svh bg-[radial-gradient(circle_at_top_left,hsl(var(--primary)/0.16),transparent_32rem),linear-gradient(180deg,hsl(var(--background)),hsl(var(--muted)))] text-foreground">
@@ -285,6 +340,22 @@ function AppInner() {
                   <span className="text-muted-foreground">Repository</span>
                   <span className="font-medium">{tree.repo}</span>
                 </div>
+                <div className="rounded-md border bg-background px-3 py-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">AI-pruned folders</span>
+                    <span className="font-medium">{tree.folders.length} / {tree.original_folder_count}</span>
+                  </div>
+                  {explanation ? <p className="mt-2 text-xs leading-relaxed text-foreground/80">{explanation}</p> : null}
+                </div>
+                <Button
+                  className="w-full gap-2"
+                  disabled={explaining || tree.folders.length === 0}
+                  onClick={handleExplain}
+                  variant="outline"
+                >
+                  {explaining ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />}
+                  Regenerate description
+                </Button>
                 <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
                   <span className="text-muted-foreground">Folders shown</span>
                   <span className="font-medium">{tree.folders.length}</span>
@@ -299,6 +370,31 @@ function AppInner() {
             </Card>
 
             {/* ── FR-05: Start Guide card ── */}
+            <Card className="border-border/80 bg-card/76 shadow-none">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Node categories</CardTitle>
+                <CardDescription>Filter the LLM-labelled architecture map.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3">
+                <div className="flex gap-2">
+                  <Button className="h-8 flex-1 text-xs" onClick={() => setActiveCategories(new Set(NODE_CATEGORIES))} variant="outline">Show all</Button>
+                  <Button className="h-8 flex-1 text-xs" onClick={() => setActiveCategories(new Set())} variant="outline">Clear</Button>
+                </div>
+                <div className="category-legend">
+                  {NODE_CATEGORIES.map((category) => {
+                    const active = activeCategories.has(category);
+                    return (
+                      <button aria-pressed={active} className="category-legend__item" key={category} onClick={() => toggleCategory(category)} style={{ opacity: active ? 1 : 0.42 }} type="button">
+                        <span className="category-legend__swatch" style={{ background: CATEGORY_COLORS[category] }} />
+                        <span>{category}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">Showing {visibleFolders.length} of {tree.folders.length} nodes. The root stays visible for context.</p>
+              </CardContent>
+            </Card>
+
             <Card className="border-border/80 bg-card/76 shadow-none">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
@@ -385,16 +481,12 @@ function AppInner() {
               style={{ left: nodeMenu.x, top: nodeMenu.y }}
             >
               <p className="node-menu__path">{nodeMenu.folderPath || "(root)"}</p>
-              <button
-                className="node-menu__btn"
-                onClick={() => {
-                  // TODO: wire up your action here
-                  console.log("Action for", nodeMenu.folderId);
-                  setNodeMenu(null);
-                }}
-              >
-                Your action
-              </button>
+              <div className="node-menu__category" style={{ color: CATEGORY_COLORS[nodeMenu.category] }}>
+                <span className="category-legend__swatch" style={{ background: CATEGORY_COLORS[nodeMenu.category] }} />
+                {nodeMenu.category}
+              </div>
+              <p className="node-menu__description">{nodeMenu.description}</p>
+              {nodeMenu.categoryReason ? <p className="node-menu__reason">{nodeMenu.categoryReason}</p> : null}
             </div>
           )}
           <ReactFlow
