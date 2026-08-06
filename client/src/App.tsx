@@ -1,25 +1,12 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactFlow, {
-  Background,
-  Controls,
-  MarkerType,
-  MiniMap,
-  Position,
-  ReactFlowProvider,
-  useReactFlow,
-  type Edge,
-  type Node,
-  type NodeMouseHandler,
+  Background, Controls, MarkerType, MiniMap, Position, ReactFlowProvider, useReactFlow,
+  type Edge, type Node, type NodeMouseHandler,
 } from "reactflow";
 import "reactflow/dist/style.css";
 import {
-  AlertCircle,
-  FolderTree,
-  GitBranch,
-  Loader2,
-  Map as MapIcon,
-  Sparkles,
-  X,
+  AlertCircle, Check, ChevronLeft, ChevronRight, FolderTree, GitBranch,
+  Loader2, Map as MapIcon, Sparkles, X,
 } from "lucide-react";
 import { analyzeRepository, explainRepository, guideRepository } from "@/api";
 import { Badge } from "@/components/ui/badge";
@@ -29,25 +16,31 @@ import { Input } from "@/components/ui/input";
 import type { GuideStep, NodeCategory, RepoEdge, RepoFolder, RepoTreeResponse } from "@/types";
 
 const CATEGORY_COLORS: Record<NodeCategory, string> = {
-  "Overview": "hsl(215 20% 45%)",
-  "Entry Point": "hsl(0 72% 51%)",
-  "UI / Presentation": "hsl(271 70% 52%)",
-  "API / Interface": "hsl(217 91% 55%)",
-  "Domain / Core Logic": "hsl(25 90% 50%)",
-  "Data / Persistence": "hsl(142 70% 38%)",
-  "Infrastructure / Configuration": "hsl(189 85% 38%)",
-  "Shared / Utilities": "hsl(45 90% 42%)",
-  "Testing / Quality": "hsl(330 75% 52%)",
-  "Documentation / Examples": "hsl(168 72% 35%)",
+  "Overview": "hsl(215 20% 45%)", "Entry Point": "hsl(0 72% 51%)",
+  "UI / Presentation": "hsl(271 70% 52%)", "API / Interface": "hsl(217 91% 55%)",
+  "Domain / Core Logic": "hsl(25 90% 50%)", "Data / Persistence": "hsl(142 70% 38%)",
+  "Infrastructure / Configuration": "hsl(189 85% 38%)", "Shared / Utilities": "hsl(45 90% 42%)",
+  "Testing / Quality": "hsl(330 75% 52%)", "Documentation / Examples": "hsl(168 72% 35%)",
+};
+const CATEGORY_SHORT: Record<NodeCategory, string> = {
+  "Overview": "Overview", "Entry Point": "Entry", "UI / Presentation": "UI",
+  "API / Interface": "API", "Domain / Core Logic": "Core", "Data / Persistence": "Data",
+  "Infrastructure / Configuration": "Infra", "Shared / Utilities": "Shared",
+  "Testing / Quality": "Tests", "Documentation / Examples": "Docs",
 };
 const NODE_CATEGORIES = Object.keys(CATEGORY_COLORS) as NodeCategory[];
+const FILTER_PRESETS: Record<string, NodeCategory[]> = {
+  "Application": ["Entry Point", "UI / Presentation", "API / Interface", "Domain / Core Logic", "Shared / Utilities"],
+  "Data": ["API / Interface", "Domain / Core Logic", "Data / Persistence"],
+  "Infrastructure": ["Infrastructure / Configuration", "Entry Point"],
+  "Tests & docs": ["Testing / Quality", "Documentation / Examples"],
+};
+type ViewMode = "architecture" | "guide";
 
 const sampleTree: RepoTreeResponse = {
-  repo: "example/learning-platform",
-  source_url: "https://github.com/example/learning-platform",
+  repo: "example/learning-platform", source_url: "https://github.com/example/learning-platform",
   explanation: "A sample repository map. Generate a tree to receive an AI-pruned architecture overview.",
-  original_folder_count: 8,
-  pruning_criteria: [],
+  original_folder_count: 8, pruning_criteria: [],
   edges: [
     { parent_id: "root", child_id: "src", label: "contains" },
     { parent_id: "root", child_id: "server", label: "contains" },
@@ -58,236 +51,185 @@ const sampleTree: RepoTreeResponse = {
     { parent_id: "server", child_id: "models", label: "persists through" },
   ],
   folders: [
-    { id: "root", name: "learning-platform", path: "", depth: 0, child_count: 4, description: "Repository root.", category: "Overview", category_reason: "Top-level context." },
-    { id: "src", name: "src", path: "src", depth: 1, parent: "root", child_count: 3, description: "Frontend source code.", category: "UI / Presentation", category_reason: "Contains the frontend." },
+    { id: "root", name: "learning-platform", path: "", depth: 0, child_count: 3, description: "Repository root.", category: "Overview", category_reason: "Top-level context." },
+    { id: "src", name: "src", path: "src", depth: 1, parent: "root", child_count: 2, description: "Frontend source code.", category: "UI / Presentation", category_reason: "Contains the frontend." },
     { id: "server", name: "server", path: "server", depth: 1, parent: "root", child_count: 2, description: "Backend application.", category: "Domain / Core Logic", category_reason: "Contains backend behavior." },
-    { id: "docs", name: "docs", path: "docs", depth: 1, parent: "root", child_count: 1, description: "Project documentation.", category: "Documentation / Examples", category_reason: "Contains documentation." },
-    { id: "components", name: "components", path: "src/components", depth: 2, parent: "src", child_count: 2, description: "Reusable UI components.", category: "UI / Presentation", category_reason: "Reusable views." },
+    { id: "docs", name: "docs", path: "docs", depth: 1, parent: "root", child_count: 0, description: "Project documentation.", category: "Documentation / Examples", category_reason: "Contains documentation." },
+    { id: "components", name: "components", path: "src/components", depth: 2, parent: "src", child_count: 0, description: "Reusable UI components.", category: "UI / Presentation", category_reason: "Reusable views." },
     { id: "routes", name: "routes", path: "src/routes", depth: 2, parent: "src", child_count: 0, description: "Application routes.", category: "Entry Point", category_reason: "Navigation entry points." },
     { id: "api", name: "api", path: "server/api", depth: 2, parent: "server", child_count: 0, description: "HTTP API layer.", category: "API / Interface", category_reason: "External HTTP boundary." },
     { id: "models", name: "models", path: "server/models", depth: 2, parent: "server", child_count: 0, description: "Domain and persistence models.", category: "Data / Persistence", category_reason: "Defines persisted data." },
   ],
 };
 
-const statusCopy = {
-  idle: "Paste a GitHub repo URL to generate a folder map.",
-  loading: "Reading repository folders...",
-  ready: "Repository tree loaded.",
-  error: "Could not load that repository.",
-} as const;
-
-// Returns a colour stop pair [borderColor, bgColor] for a guide step badge (1-indexed)
-function guideStepColors(order: number): [string, string] {
-  const palette: [string, string][] = [
-    ["hsl(38 92% 50%)", "hsl(38 92% 50% / 0.14)"],   // 1 → amber
-    ["hsl(221 83% 53%)", "hsl(221 83% 53% / 0.14)"],  // 2 → blue (primary)
-    ["hsl(142 71% 45%)", "hsl(142 71% 45% / 0.14)"],  // 3 → green
-    ["hsl(271 76% 60%)", "hsl(271 76% 60% / 0.14)"],  // 4 → violet
-    ["hsl(340 82% 52%)", "hsl(340 82% 52% / 0.14)"],  // 5 → rose
-  ];
-  return palette[(order - 1) % palette.length];
+function visibleWithContext(folders: RepoFolder[], active: Set<NodeCategory>): RepoFolder[] {
+  const byId = new Map(folders.map((folder) => [folder.id, folder]));
+  const visible = new Set<string>(["root"]);
+  for (const folder of folders) {
+    if (!active.has(folder.category)) continue;
+    let current: RepoFolder | undefined = folder;
+    while (current) {
+      visible.add(current.id);
+      current = current.parent ? byId.get(current.parent) : undefined;
+    }
+  }
+  return folders.filter((folder) => visible.has(folder.id));
 }
 
-function folderToNode(
-  folder: RepoFolder,
-  siblingIndex: number,
-  guideMap: Map<string, GuideStep>,
-): Node {
-  const step = guideMap.get(folder.id);
-  const [borderColor] = step ? guideStepColors(step.order) : [""];
-  const categoryColor = CATEGORY_COLORS[folder.category];
-
-  return {
-    id: folder.id,
-    position: {
-      x: folder.depth * 310,
-      y: siblingIndex * 120,
-    },
-    sourcePosition: Position.Right,
-    targetPosition: Position.Left,
-    style: {
-      border: `2px solid ${categoryColor}`,
-      background: `color-mix(in srgb, ${categoryColor} 10%, hsl(var(--card)))`,
-      boxShadow: step
-        ? `0 0 0 4px ${borderColor}, 0 18px 50px hsl(222 47% 11% / 0.18)`
-        : `0 10px 30px hsl(222 47% 11% / 0.12)`,
-    },
-    data: {
-      label: (
-        <div className="repo-node">
-          <div
-            className="repo-node__icon"
-            style={{ background: `color-mix(in srgb, ${categoryColor} 16%, transparent)`, color: categoryColor }}
-          >
-            {step ? (
-              <span className="guide-order-badge" style={{ color: borderColor }}>
-                {step.order}
-              </span>
-            ) : (
-              <FolderTree size={18} />
-            )}
-          </div>
-          <div>
-            <strong>{folder.name}</strong>
-            <span>{folder.path || "repo root"}</span>
-          </div>
-          <Badge style={{ color: categoryColor }} variant="secondary">{folder.category}</Badge>
-        </div>
-      ),
-    },
-  };
-}
-
-function buildNodes(folders: RepoFolder[], guideMap: Map<string, GuideStep>): Node[] {
+function buildNodes(
+  folders: RepoFolder[], mode: ViewMode, guide: GuideStep[], guideIndex: number,
+  active: Set<NodeCategory>,
+): Node[] {
   const depthCounts = new Map<number, number>();
   return folders.map((folder) => {
-    const siblingIndex = depthCounts.get(folder.depth) ?? 0;
-    depthCounts.set(folder.depth, siblingIndex + 1);
-    return folderToNode(folder, siblingIndex, guideMap);
+    const row = depthCounts.get(folder.depth) ?? 0;
+    depthCounts.set(folder.depth, row + 1);
+    const stepIndex = guide.findIndex((step) => step.folder_id === folder.id);
+    const isCurrent = mode === "guide" && stepIndex === guideIndex;
+    const isComplete = mode === "guide" && stepIndex >= 0 && stepIndex < guideIndex;
+    const isGuideNode = stepIndex >= 0;
+    const isContext = !active.has(folder.category);
+    const categoryColor = CATEGORY_COLORS[folder.category];
+    return {
+      id: folder.id, position: { x: folder.depth * 320, y: row * 116 },
+      sourcePosition: Position.Right, targetPosition: Position.Left,
+      style: {
+        border: isCurrent ? "2px solid hsl(38 92% 50%)" : "1px solid hsl(var(--border))",
+        background: "hsl(var(--card))",
+        boxShadow: isCurrent ? "0 0 0 4px hsl(38 92% 50% / .2), 0 18px 42px hsl(222 47% 11% / .18)" : "0 8px 24px hsl(222 47% 11% / .09)",
+        opacity: mode === "guide" && !isGuideNode ? 0.3 : isContext ? 0.5 : 1,
+      },
+      data: { label: (
+        <div className="repo-node">
+          <span className="repo-node__category-strip" style={{ background: mode === "guide" ? "hsl(var(--border))" : categoryColor }} />
+          <div className="repo-node__icon">
+            {mode === "guide" && isGuideNode
+              ? <span className={`guide-order-badge${isCurrent ? " is-current" : ""}`}>{isComplete ? <Check size={13} /> : stepIndex + 1}</span>
+              : <FolderTree size={18} />}
+          </div>
+          <div className="repo-node__copy"><strong>{folder.name}</strong><span>{folder.path || "repo root"}</span></div>
+          <span className="repo-node__kind">{isContext ? "context" : CATEGORY_SHORT[folder.category]}</span>
+        </div>
+      ) },
+    };
   });
 }
 
-function buildEdges(folders: RepoFolder[], repoEdges: RepoEdge[]): Edge[] {
-  const visibleIds = new Set(folders.map((folder) => folder.id));
-  return repoEdges
-    .filter((edge) => visibleIds.has(edge.parent_id) && visibleIds.has(edge.child_id))
-    .map((edge) => ({
-      id: `${edge.parent_id}-${edge.child_id}`,
-      source: edge.parent_id,
-      target: edge.child_id,
-      type: "smoothstep",
-      label: edge.label,
+function buildEdges(
+  folders: RepoFolder[], repoEdges: RepoEdge[], mode: ViewMode,
+  selectedId: string | null, currentGuideId: string | null,
+): Edge[] {
+  const visible = new Set(folders.map((folder) => folder.id));
+  return repoEdges.filter((edge) => visible.has(edge.parent_id) && visible.has(edge.child_id)).map((edge) => {
+    const focusedId = mode === "guide" ? currentGuideId : selectedId;
+    const focused = edge.parent_id === focusedId || edge.child_id === focusedId;
+    return {
+      id: `${edge.parent_id}-${edge.child_id}`, source: edge.parent_id, target: edge.child_id,
+      type: "smoothstep", label: focused && edge.label !== "contains" ? edge.label : undefined,
       labelStyle: { fill: "hsl(var(--foreground))", fontSize: 11, fontWeight: 600 },
-      labelBgStyle: { fill: "hsl(var(--background))", fillOpacity: 0.9 },
-      labelBgPadding: [5, 3] as [number, number],
-      labelBgBorderRadius: 4,
-      markerEnd: {
-        type: MarkerType.ArrowClosed,
-        color: "hsl(var(--primary))",
-      },
-      style: {
-        stroke: "hsl(var(--primary))",
-        strokeWidth: 2,
-      },
-    }));
+      labelBgStyle: { fill: "hsl(var(--background))", fillOpacity: 0.94 },
+      labelBgPadding: [5, 3] as [number, number], labelBgBorderRadius: 4,
+      markerEnd: { type: MarkerType.ArrowClosed, color: focused ? "hsl(38 92% 50%)" : "hsl(var(--muted-foreground))" },
+      style: { stroke: focused ? "hsl(38 92% 50%)" : "hsl(var(--muted-foreground) / .45)", strokeWidth: focused ? 2.5 : 1.4 },
+    };
+  });
 }
 
-type NodeMenu = {
-  folderId: string;
-  folderPath: string;
-  description: string;
-  category: NodeCategory;
-  categoryReason: string;
-  x: number; // px from left of the <section>
-  y: number; // px from top of the <section>
-};
+function NodeDetails({ folder, onClose }: { folder: RepoFolder; onClose: () => void }) {
+  const color = CATEGORY_COLORS[folder.category];
+  return (
+    <aside className="node-details" aria-label="Folder details">
+      <div className="node-details__header">
+        <div><p>{folder.path || "Repository root"}</p><h2>{folder.name}</h2></div>
+        <button aria-label="Close details" onClick={onClose}><X size={17} /></button>
+      </div>
+      <div className="node-details__category" style={{ color }}><span style={{ background: color }} />{folder.category}</div>
+      <p className="node-details__description">{folder.description}</p>
+      <div className="node-details__section"><span>Why this category</span><p>{folder.category_reason || "No classification reason was provided."}</p></div>
+      <div className="node-details__section"><span>Structure</span><p>{folder.child_count} retained child {folder.child_count === 1 ? "folder" : "folders"}</p></div>
+    </aside>
+  );
+}
 
 function AppInner() {
   const { fitView } = useReactFlow();
   const flowRef = useRef<HTMLDivElement>(null);
   const [repoUrl, setRepoUrl] = useState("https://github.com/facebook/react");
   const [tree, setTree] = useState<RepoTreeResponse>(sampleTree);
-  const [status, setStatus] = useState<keyof typeof statusCopy>("idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [error, setError] = useState("");
-  const [explanation, setExplanation] = useState("");
+  const [explanation, setExplanation] = useState(sampleTree.explanation);
   const [explaining, setExplaining] = useState(false);
-
-  // Guide state
   const [guideSteps, setGuideSteps] = useState<GuideStep[]>([]);
+  const [guideIndex, setGuideIndex] = useState(0);
   const [guiding, setGuiding] = useState(false);
   const [guideError, setGuideError] = useState("");
+  const [mode, setMode] = useState<ViewMode>("architecture");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeCategories, setActiveCategories] = useState<Set<NodeCategory>>(() => new Set(NODE_CATEGORIES));
 
-  // Node context menu
-  const [nodeMenu, setNodeMenu] = useState<NodeMenu | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  const guideMap = useMemo(() => {
-    const map = new Map<string, GuideStep>();
-    for (const step of guideSteps) map.set(step.folder_id, step);
-    return map;
-  }, [guideSteps]);
-
-  const onNodeClick = useCallback<NodeMouseHandler>((event, node) => {
-    const section = flowRef.current;
-    if (!section) return;
-    const rect = section.getBoundingClientRect();
-    const folder = tree.folders.find((f) => f.id === node.id);
-    setNodeMenu({
-      folderId: node.id,
-      folderPath: folder?.path || "(root)",
-      description: folder?.description || "No description is available.",
-      category: folder?.category || "Overview",
-      categoryReason: folder?.category_reason || "",
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
-    });
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<NodeCategory, number>();
+    for (const folder of tree.folders) counts.set(folder.category, (counts.get(folder.category) ?? 0) + 1);
+    return counts;
   }, [tree.folders]);
-
-  // Close the menu when clicking outside it
-  useEffect(() => {
-    if (!nodeMenu) return;
-    function handleOutsideClick(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Element)) {
-        setNodeMenu(null);
-      }
-    }
-    document.addEventListener("mousedown", handleOutsideClick);
-    return () => document.removeEventListener("mousedown", handleOutsideClick);
-  }, [nodeMenu]);
-
-  const visibleFolders = useMemo(
-    () => tree.folders.filter((folder) => folder.id === "root" || activeCategories.has(folder.category)),
-    [tree.folders, activeCategories],
+  const activePresentCount = useMemo(
+    () => NODE_CATEGORIES.filter((category) => categoryCounts.has(category) && activeCategories.has(category)).length,
+    [categoryCounts, activeCategories],
   );
-  const nodes = useMemo(() => buildNodes(visibleFolders, guideMap), [visibleFolders, guideMap]);
-  const edges = useMemo(() => buildEdges(visibleFolders, tree.edges), [visibleFolders, tree.edges]);
+  const visibleFolders = useMemo(() => visibleWithContext(tree.folders, activeCategories), [tree.folders, activeCategories]);
+  const currentGuide = guideSteps[guideIndex] ?? null;
+  const nodes = useMemo(
+    () => buildNodes(visibleFolders, mode, guideSteps, guideIndex, activeCategories),
+    [visibleFolders, mode, guideSteps, guideIndex, activeCategories],
+  );
+  const edges = useMemo(
+    () => buildEdges(visibleFolders, tree.edges, mode, selectedId, currentGuide?.folder_id ?? null),
+    [visibleFolders, tree.edges, mode, selectedId, currentGuide?.folder_id],
+  );
+  const selectedFolder = tree.folders.find((folder) => folder.id === selectedId) ?? null;
+
+  useEffect(() => {
+    if (mode !== "guide" || !currentGuide) return;
+    const timer = window.setTimeout(() => {
+      const focusNodes = nodes.filter((node) => node.id === currentGuide.folder_id);
+      if (focusNodes.length) void fitView({ nodes: focusNodes, padding: 1.5, duration: 450 });
+    }, 60);
+    return () => window.clearTimeout(timer);
+  }, [mode, guideIndex, currentGuide, nodes, fitView]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setStatus("loading");
-    setError("");
-    setGuideSteps([]);
-    setGuideError("");
-
+    event.preventDefault(); setStatus("loading"); setError(""); setGuideSteps([]); setGuideError(""); setMode("architecture"); setSelectedId(null);
     try {
       const result = await analyzeRepository(repoUrl);
-      setTree(result);
-      setExplanation(result.explanation);
-      setActiveCategories(new Set(NODE_CATEGORIES));
-      setStatus("ready");
-      setTimeout(() => fitView({ padding: 0.22, duration: 400 }), 50);
-    } catch (caught) {
-      setStatus("error");
-      setError(caught instanceof Error ? caught.message : "Something went wrong.");
-    }
+      setTree(result); setExplanation(result.explanation); setActiveCategories(new Set(NODE_CATEGORIES)); setStatus("ready");
+      window.setTimeout(() => void fitView({ padding: 0.22, duration: 400 }), 50);
+    } catch (caught) { setStatus("error"); setError(caught instanceof Error ? caught.message : "Something went wrong."); }
   }
 
   async function handleExplain() {
     setExplaining(true);
-    try {
-      const result = await explainRepository(tree.repo, tree.folders);
-      setExplanation(result.explanation);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not generate explanation.");
-    } finally {
-      setExplaining(false);
-    }
+    try { const result = await explainRepository(tree.repo, tree.folders); setExplanation(result.explanation); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : "Could not generate explanation."); }
+    finally { setExplaining(false); }
   }
 
   const handleGuide = useCallback(async () => {
-    setGuiding(true);
-    setGuideError("");
-    setGuideSteps([]);
+    setGuiding(true); setGuideError("");
     try {
       const result = await guideRepository(tree.repo, tree.folders);
-      setGuideSteps(result.steps);
-    } catch (caught) {
-      setGuideError(caught instanceof Error ? caught.message : "Could not generate guide.");
-    } finally {
-      setGuiding(false);
-    }
+      setGuideSteps(result.steps); setGuideIndex(0); setMode("guide"); setSelectedId(result.steps[0]?.folder_id ?? null);
+    } catch (caught) { setGuideError(caught instanceof Error ? caught.message : "Could not generate guide."); }
+    finally { setGuiding(false); }
   }, [tree]);
+
+  const onNodeClick = useCallback<NodeMouseHandler>((_, node) => {
+    setSelectedId(node.id);
+    if (mode === "guide") {
+      const index = guideSteps.findIndex((step) => step.folder_id === node.id);
+      if (index >= 0) setGuideIndex(index);
+    }
+  }, [mode, guideSteps]);
 
   function toggleCategory(category: NodeCategory) {
     setActiveCategories((current) => {
@@ -298,224 +240,59 @@ function AppInner() {
     });
   }
 
+  function moveGuide(direction: -1 | 1) {
+    const next = Math.max(0, Math.min(guideSteps.length - 1, guideIndex + direction));
+    setGuideIndex(next); setSelectedId(guideSteps[next]?.folder_id ?? null);
+  }
+
   return (
-    <main className="min-h-svh bg-[radial-gradient(circle_at_top_left,hsl(var(--primary)/0.16),transparent_32rem),linear-gradient(180deg,hsl(var(--background)),hsl(var(--muted)))] text-foreground">
-      <div className="grid min-h-svh grid-cols-1 lg:grid-cols-[420px_minmax(0,1fr)]">
-        <aside className="border-b border-border/70 bg-card/88 p-5 shadow-sm backdrop-blur-xl lg:border-b-0 lg:border-r">
-          <Card className="border-border/80 bg-card/90 shadow-none">
-            <CardHeader>
-              <Badge className="w-fit gap-1.5" variant="outline">
-                <Sparkles size={14} />
-                React Flow repo mapper
-              </Badge>
-              <CardTitle className="text-3xl">Folder Tree</CardTitle>
-              <CardDescription>
-                Enter a public GitHub repository URL. The app draws folders left to right and ignores loose files.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form className="grid gap-3" onSubmit={handleSubmit}>
-                <Input
-                  aria-label="Repository URL"
-                  onChange={(event) => setRepoUrl(event.target.value)}
-                  placeholder="https://github.com/owner/repo"
-                  value={repoUrl}
-                />
-                <Button className="w-full gap-2" disabled={status === "loading"} type="submit">
-                  {status === "loading" ? <Loader2 className="animate-spin" size={16} /> : <GitBranch size={16} />}
-                  Generate tree
-                </Button>
-              </form>
-            </CardContent>
+    <main className="app-shell">
+      <div className="app-layout">
+        <aside className="control-rail">
+          <Card className="border-border/80 bg-card/95 shadow-none">
+            <CardHeader><Badge className="w-fit gap-1.5" variant="outline"><Sparkles size={14} />Repo mapper</Badge><CardTitle className="text-3xl">Folder Tree</CardTitle><CardDescription>Generate a focused architecture map from a public GitHub repository.</CardDescription></CardHeader>
+            <CardContent><form className="grid gap-3" onSubmit={handleSubmit}><Input aria-label="Repository URL" onChange={(event) => setRepoUrl(event.target.value)} placeholder="https://github.com/owner/repo" value={repoUrl} /><Button className="w-full gap-2" disabled={status === "loading"} type="submit">{status === "loading" ? <Loader2 className="animate-spin" size={16} /> : <GitBranch size={16} />}Generate tree</Button></form></CardContent>
           </Card>
 
-          <div className="mt-4 grid gap-4">
-            <Card className="border-border/80 bg-card/76 shadow-none">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Current Map</CardTitle>
-                <CardDescription>{statusCopy[status]}</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3 text-sm">
-                <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
-                  <span className="text-muted-foreground">Repository</span>
-                  <span className="font-medium">{tree.repo}</span>
-                </div>
-                <div className="rounded-md border bg-background px-3 py-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-muted-foreground">AI-pruned folders</span>
-                    <span className="font-medium">{tree.folders.length} / {tree.original_folder_count}</span>
-                  </div>
-                  {explanation ? <p className="mt-2 text-xs leading-relaxed text-foreground/80">{explanation}</p> : null}
-                </div>
-                <Button
-                  className="w-full gap-2"
-                  disabled={explaining || tree.folders.length === 0}
-                  onClick={handleExplain}
-                  variant="outline"
-                >
-                  {explaining ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />}
-                  Regenerate description
-                </Button>
-                <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
-                  <span className="text-muted-foreground">Folders shown</span>
-                  <span className="font-medium">{tree.folders.length}</span>
-                </div>
-                {error ? (
-                  <div className="flex gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-destructive">
-                    <AlertCircle className="mt-0.5 shrink-0" size={16} />
-                    <p>{error}</p>
-                  </div>
-                ) : null}
-              </CardContent>
-            </Card>
+          <section className="rail-section">
+            <div className="rail-heading"><div><h2>{tree.repo}</h2><p>{visibleFolders.length} shown · {tree.folders.length} retained · {tree.original_folder_count} scanned</p></div><Button className="h-8 px-2" disabled={explaining} onClick={handleExplain} variant="ghost">{explaining ? <Loader2 className="animate-spin" size={14} /> : <Sparkles size={14} />}</Button></div>
+            <p className="repo-summary">{explanation}</p>
+            {error ? <div className="error-message"><AlertCircle size={16} /><p>{error}</p></div> : null}
+          </section>
 
-            {/* ── FR-05: Start Guide card ── */}
-            <Card className="border-border/80 bg-card/76 shadow-none">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Node categories</CardTitle>
-                <CardDescription>Filter the LLM-labelled architecture map.</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3">
-                <div className="flex gap-2">
-                  <Button className="h-8 flex-1 text-xs" onClick={() => setActiveCategories(new Set(NODE_CATEGORIES))} variant="outline">Show all</Button>
-                  <Button className="h-8 flex-1 text-xs" onClick={() => setActiveCategories(new Set())} variant="outline">Clear</Button>
-                </div>
-                <div className="category-legend">
-                  {NODE_CATEGORIES.map((category) => {
-                    const active = activeCategories.has(category);
-                    return (
-                      <button aria-pressed={active} className="category-legend__item" key={category} onClick={() => toggleCategory(category)} style={{ opacity: active ? 1 : 0.42 }} type="button">
-                        <span className="category-legend__swatch" style={{ background: CATEGORY_COLORS[category] }} />
-                        <span>{category}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-xs text-muted-foreground">Showing {visibleFolders.length} of {tree.folders.length} nodes. The root stays visible for context.</p>
-              </CardContent>
-            </Card>
+          <details className="filter-panel" open>
+            <summary>Categories <span>{activePresentCount}/{categoryCounts.size}</span></summary>
+            <div className="filter-actions"><button onClick={() => setActiveCategories(new Set(NODE_CATEGORIES))}>Show all</button><button onClick={() => setActiveCategories(new Set())}>Hide all</button></div>
+            <div className="preset-list">{Object.entries(FILTER_PRESETS).map(([name, categories]) => <button key={name} onClick={() => setActiveCategories(new Set(categories))}>{name}</button>)}</div>
+            <div className="category-list">{NODE_CATEGORIES.filter((category) => categoryCounts.has(category)).map((category) => (
+              <label key={category}><input checked={activeCategories.has(category)} onChange={() => toggleCategory(category)} type="checkbox" /><span className="category-swatch" style={{ background: CATEGORY_COLORS[category] }} /><span>{category}</span><small>{categoryCounts.get(category)}</small></label>
+            ))}</div>
+            <p className="context-note">Muted ancestors stay visible to preserve structure.</p>
+          </details>
 
-            <Card className="border-border/80 bg-card/76 shadow-none">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <MapIcon size={16} />
-                  Exploration Guide
-                </CardTitle>
-                <CardDescription>
-                  Let AI recommend the best starting points in this repository.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3">
-                <Button
-                  className="w-full gap-2"
-                  disabled={guiding || tree.folders.length === 0}
-                  onClick={handleGuide}
-                  variant={guideSteps.length > 0 ? "outline" : "default"}
-                >
-                  {guiding ? (
-                    <Loader2 className="animate-spin" size={16} />
-                  ) : (
-                    <MapIcon size={16} />
-                  )}
-                  {guideSteps.length > 0 ? "Regenerate guide" : "Start guide"}
-                </Button>
-
-                {guideError ? (
-                  <div className="flex gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-                    <AlertCircle className="mt-0.5 shrink-0" size={16} />
-                    <p>{guideError}</p>
-                  </div>
-                ) : null}
-
-                {guideSteps.length > 0 && (
-                  <div className="grid gap-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Recommended path
-                      </p>
-                      <button
-                        aria-label="Clear guide"
-                        className="flex items-center justify-center p-1 text-muted-foreground hover:text-foreground transition-colors"
-                        onClick={() => setGuideSteps([])}
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                    {guideSteps.map((step) => {
-                      const [borderColor, bgColor] = guideStepColors(step.order);
-                      return (
-                        <div
-                          key={step.folder_id}
-                          className="flex gap-3 rounded-md border p-3 text-sm"
-                          style={{ borderColor, background: bgColor }}
-                        >
-                          <span
-                            className="guide-step-number shrink-0"
-                            style={{ color: borderColor }}
-                          >
-                            {step.order}
-                          </span>
-                          <div className="min-w-0">
-                            <p className="font-semibold truncate" style={{ color: borderColor }}>
-                              {step.folder_path || "(root)"}
-                            </p>
-                            <p className="mt-0.5 text-xs leading-relaxed text-foreground/80">
-                              {step.reason}
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+          <section className="guide-panel">
+            <div className="rail-heading"><div><h2>Exploration guide</h2><p>Follow one recommended folder at a time.</p></div>{mode === "guide" ? <button className="icon-button" aria-label="Exit guide" onClick={() => setMode("architecture")}><X size={16} /></button> : null}</div>
+            {guideError ? <div className="error-message"><AlertCircle size={16} /><p>{guideError}</p></div> : null}
+            {mode === "guide" && currentGuide ? (
+              <div className="guide-current">
+                <div className="guide-progress"><span>Step {guideIndex + 1} of {guideSteps.length}</span><div><i style={{ width: `${((guideIndex + 1) / guideSteps.length) * 100}%` }} /></div></div>
+                <h3>{currentGuide.folder_path}</h3><p>{currentGuide.reason}</p>
+                <div className="guide-nav"><Button disabled={guideIndex === 0} onClick={() => moveGuide(-1)} variant="outline"><ChevronLeft size={15} />Previous</Button><Button disabled={guideIndex === guideSteps.length - 1} onClick={() => moveGuide(1)}>Next<ChevronRight size={15} /></Button></div>
+              </div>
+            ) : <Button className="w-full gap-2" disabled={guiding || !tree.folders.length} onClick={handleGuide}>{guiding ? <Loader2 className="animate-spin" size={16} /> : <MapIcon size={16} />}{guideSteps.length ? "Restart guided tour" : "Start guided tour"}</Button>}
+          </section>
         </aside>
 
-        <section className="min-h-[62vh] lg:min-h-svh relative" ref={flowRef}>
-          {nodeMenu && (
-            <div
-              ref={menuRef}
-              className="node-menu"
-              style={{ left: nodeMenu.x, top: nodeMenu.y }}
-            >
-              <p className="node-menu__path">{nodeMenu.folderPath || "(root)"}</p>
-              <div className="node-menu__category" style={{ color: CATEGORY_COLORS[nodeMenu.category] }}>
-                <span className="category-legend__swatch" style={{ background: CATEGORY_COLORS[nodeMenu.category] }} />
-                {nodeMenu.category}
-              </div>
-              <p className="node-menu__description">{nodeMenu.description}</p>
-              {nodeMenu.categoryReason ? <p className="node-menu__reason">{nodeMenu.categoryReason}</p> : null}
-            </div>
-          )}
-          <ReactFlow
-            className="repo-flow"
-            edges={edges}
-            fitView
-            fitViewOptions={{ padding: 0.22 }}
-            minZoom={0.18}
-            nodes={nodes}
-            nodesDraggable
-            onNodeClick={onNodeClick}
-            onPaneClick={() => setNodeMenu(null)}
-          >
-            <MiniMap maskColor="hsl(var(--background) / 0.72)" pannable zoomable />
-            <Controls />
-            <Background color="hsl(var(--muted-foreground) / 0.38)" gap={28} size={1} />
+        <section className="graph-stage" ref={flowRef}>
+          <div className="mode-switch" aria-label="Graph view mode"><button aria-pressed={mode === "architecture"} onClick={() => setMode("architecture")}>Architecture</button><button aria-pressed={mode === "guide"} disabled={!guideSteps.length} onClick={() => setMode("guide")}>Guided tour</button></div>
+          <ReactFlow className="repo-flow" edges={edges} fitView fitViewOptions={{ padding: 0.22 }} minZoom={0.18} nodes={nodes} nodesDraggable onNodeClick={onNodeClick} onPaneClick={() => setSelectedId(null)}>
+            <MiniMap maskColor="hsl(var(--background) / 0.75)" pannable zoomable /><Controls /><Background color="hsl(var(--muted-foreground) / 0.24)" gap={28} size={1} />
           </ReactFlow>
+          {selectedFolder ? <NodeDetails folder={selectedFolder} onClose={() => setSelectedId(null)} /> : null}
         </section>
       </div>
     </main>
   );
 }
 
-function App() {
-  return (
-    <ReactFlowProvider>
-      <AppInner />
-    </ReactFlowProvider>
-  );
-}
-
-export default App;
+export default function App() { return <ReactFlowProvider><AppInner /></ReactFlowProvider>; }
